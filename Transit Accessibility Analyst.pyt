@@ -146,11 +146,15 @@ class CreateNetwork:
                 for nd in nds:
                     nd_full_path = os.path.join(fd_path, dataset, nd)
                     nd_desc = arcpy.Describe(nd_full_path)
-                    if np.any([source.name in nd_check_list
-                               for source in nd_desc.sources]):
+                    if np.any(
+                        [source.name in nd_check_list
+                         for source in nd_desc.sources]
+                    ):
                         arcpy.Delete_management(nd_full_path)
-                        msg.addMessage(f'Delete conflicting network dataset, '
-                                       f'{nd}, within the workspace.')
+                        msg.addMessage(
+                            f'Delete conflicting network dataset, {nd}, '
+                            f'within the workspace.'
+                        )
 
         arcpy.env.workspace = fd_path
 
@@ -413,6 +417,7 @@ class DefineOD:
         transit_stops = 'Stops'
         stop_connectors = 'StopConnectors'
         line_variant_elements = 'LineVariantElements'
+        walk_cvr_pct = 'WalkCvrPct'
 
         arcpy.env.workspace = transit_nw_fd
         transit_nw = os.path.join(transit_nw_fd, transit_nw_name)
@@ -455,6 +460,9 @@ class DefineOD:
                                'within the specified walking time limit. '
                                'Process terminated.')
                 return
+        else:
+            # if no time limit for walking, use all opportunity points
+            op_pnt_wi_walk = op_pnt
 
         origins = os.path.join(temp_ws, origins)
         walk_covered_arr = None
@@ -492,6 +500,7 @@ class DefineOD:
                 'JOIN_ONE_TO_ONE', 'KEEP_COMMON', fms, 
                 'HAVE_THEIR_CENTER_IN'
             )
+            # Calculate percentage of walking coverage in each zone
             arcpy.CalculateField_management(
                 res_loc_zone, 'WALK_COVERED', 
                 0, 'PYTHON3', '', 'SHORT'
@@ -516,14 +525,16 @@ class DefineOD:
                                res_agg_df[f'{res_loc_id}'])
             walk_covered_df = pd.DataFrame({
                 zone_id: walk_covered_sr.index,
-                'WalkCvrPct': walk_covered_sr.values
+                walk_cvr_pct: walk_covered_sr.values
             })
             walk_covered_arr = walk_covered_df.to_records(index=False)
+            # median center of residential locations in each zone
             arcpy.MedianCenter_stats(
                 res_loc_zone, origins, '',
                 zone_id, ''
             )
         else:
+            # if no residential locations provided, use zone centroid
             arcpy.FeatureToPoint_management(study_zone, origins, 'INSIDE')
 
         msg.addMessage('Creating OD matrix...')
@@ -571,6 +582,12 @@ class DefineOD:
             arcpy.da.ExtendTable(
                 cost_lines, 'OriginZone',
                 walk_covered_arr, zone_id
+            )
+        else:
+            # add new field "WalkCvrPct" with a value of 1
+            arcpy.CalculateField_management(
+                cost_lines, walk_cvr_pct, 1,
+                'PYTHON3', '', 'SHORT'
             )
         arcpy.CopyFeatures_management(cost_lines, output_tbl)
         return
@@ -1155,19 +1172,19 @@ class ProposeNewRoute:
                     timepoint = np.zeros(len(stops_dict[key]))
                     timepoint[0] = timepoint[-1] = 1
                     new_stop_times_df = pd.DataFrame(
-                        np.column_stack((np.full(len(stops_dict[key]),
-                                                 trip_id),
-                                         arrival_times, departure_times,
-                                         stops_d1,
-                                         np.arange(len(stops_dict[key])),
-                                         timepoint)),
-                        columns=['trip_id',
-                                 'arrival_time', 'departure_time',
-                                 'stop_id', 'stop_sequence',
-                                 'timepoint']
+                        data=np.column_stack(
+                            (np.full(len(stops_dict[key]), trip_id),
+                             arrival_times, departure_times, stops_d1,
+                             np.arange(len(stops_dict[key])),
+                             timepoint)
+                        ),
+                        columns=['trip_id', 'arrival_time',
+                                 'departure_time', 'stop_id',
+                                 'stop_sequence', 'timepoint']
                     )
-                    dt_start_datetime = (dt_start_datetime +
-                                         2*dt_minutes_per_trip)
+                    dt_start_datetime = (
+                        dt_start_datetime + 2*dt_minutes_per_trip
+                    )
                     stop_times_df = stop_times_df.append(
                         new_stop_times_df, ignore_index=True
                     )
