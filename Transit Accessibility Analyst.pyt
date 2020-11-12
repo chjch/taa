@@ -15,9 +15,9 @@ class Toolbox:
         # List of tool classes associated with this toolbox
         self.tools = [
             CreateNetwork, 
-            DefineOD,
+            CalculateImpedance,
             MeasureAccessibility, 
-            ProposeNewRoute
+            UpdateGTFS
         ]
 
 
@@ -229,11 +229,10 @@ class CreateNetwork:
         return
 
 
-class DefineOD:
+class CalculateImpedance:
     def __init__(self):
-        self.label = "2. Define Origin and Destination"
-        self.description = ('Defining the origin and destination layer for '
-                            'the accessibility analysis.')
+        self.label = "2. Calculate Impedance and Opportunity"
+        self.description = ''
         self.canRunInBackground = False
 
     def getParameterInfo(self):
@@ -363,20 +362,34 @@ class DefineOD:
             direction='Output'
         )
 
+        param13 = arcpy.Parameter(
+            displayName='Output Workspace',
+            name='output_ws',
+            datatype='GPString',
+            parameterType='Derived',
+            direction='Output'
+        )
+
         return [param0, param1, param2, param3, param4, param5, param6,
-                param7, param8, param9, param10, param11, param12]
+                param7, param8, param9, param10, param11, param12, param13]
 
     @staticmethod
     def updateParameters(param):
         param[1].enabled = True if param[0].value else False
         param[3].enabled = True if param[2].value else False
-        if param[4].value:
-            if param[12].hasBeenValidated:
-                param[12].value = os.path.join(
-                    os.path.dirname(param[4].valueAsText), 
-                    'od_cost_output'
-                )
         param[8].enabled = True if param[7].value else False
+        if param[4].valueAsText:
+            p4_path = os.path.dirname(param[4].valueAsText)
+            if not param[13].value:
+                param[13].value = p4_path
+                param[12].value = os.path.join(param[13].value,
+                                               'od_cost_output')
+            else:
+                param[13].value, output_name = os.path.split(
+                    param[12].valueAsText
+                )
+                param[12].value = os.path.join(param[13].value,
+                                               output_name)
         return
 
     @staticmethod
@@ -704,9 +717,11 @@ class MeasureAccessibility:
                 param[8].value = os.path.join(param[9].value,
                                               'TAA_FinalOutput')
             else:
-                param[9].value = os.path.dirname(param[8].valueAsText)
+                param[9].value, output_name = os.path.split(
+                    param[8].valueAsText
+                )
                 param[8].value = os.path.join(
-                    param[9].value, 'TAA_FinalOutput'
+                    param[9].value, output_name
                 )
         param[2].enabled = True if param[1].value == 'Definite' else False
         if param[2].enabled and param[2].value == 'Access Score':
@@ -768,11 +783,11 @@ class MeasureAccessibility:
                 ta_score_sr = cost_by_origin[cost_field].count()
                 ta_score_sr.name = 'TAA_SumDestination'
             elif metric == 'Access Score':
-                if decay_func == 'Gaussian':
+                if decay_func == 'Modified Gaussian':
                     time_cost_df['decay_cost'] = np.exp(
                         -time_cost_df[cost_field]**2/decay_param
                     )
-                elif decay_func == 'Exponential':
+                elif decay_func == 'Negative Exponential':
                     time_cost_df['decay_cost'] = np.exp(
                         -time_cost_df[cost_field]*decay_param
                     )
@@ -830,9 +845,9 @@ class MeasureAccessibility:
         return
 
 
-class ProposeNewRoute:
+class UpdateGTFS:
     def __init__(self):
-        self.label = "4. Propose a New Route"
+        self.label = "4. Update GTFS using Proposed Routes"
         self.description = ""
         self.canRunInBackground = False
         self.stops_txt = 'stops.txt'
