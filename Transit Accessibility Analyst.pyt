@@ -1136,14 +1136,21 @@ class UpdateGTFS:
 
             for key in trip_ids_dict.keys():
                 new_trips_df = pd.DataFrame(
-                    np.column_stack((trip_ids_dict[key],
-                                     np.full(num_trips, route_id),
-                                     np.full(num_trips, service_id),
-                                     trip_funcs_dict[key](num_trips))),
-                    columns=['trip_id', 'route_id',
-                             'service_id', 'direction_id']
+                    {'trip_id': pd.Series(
+                        trip_ids_dict[key],
+                        dtype=trips_df['trip_id'].dtype),
+                     'route_id': pd.Series(
+                         np.full(num_trips, route_id),
+                         dtype=trips_df['route_id'].dtype),
+                     'service_id': pd.Series(
+                         np.full(num_trips, service_id),
+                         dtype=trips_df['service_id'].dtype),
+                     'direction_id': pd.Series(
+                         trip_funcs_dict[key](num_trips),
+                         dtype=trips_df['direction_id'].dtype)}
                 )
-                trips_df = trips_df.append(new_trips_df, ignore_index=True)
+                trips_df = trips_df.append(new_trips_df,
+                                           ignore_index=True)
             trips_df.to_csv(trips_txt, index=False)
 
             stops_dict = {1: stops_d1, 2: stops_d2}
